@@ -1,7 +1,7 @@
 name: three_d_graph
 description: "A new Flutter package project."
 version: 0.0.1
-homepage:
+homepage: https://github.com/satri-tech/three_d_graph
 
 environment:
   sdk: ^3.6.1
