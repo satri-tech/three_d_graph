@@ -5,7 +5,9 @@ class ThreeDGraph extends StatefulWidget {
   final List<List<double>> points;
   final List<List<double>> shape;
   final Color markerColor;
+  final Color shapeColor;
   final bool showGrid;
+  final bool showRuler;
   final bool showAxis;
   final double? height;
   final double? width;
@@ -17,7 +19,9 @@ class ThreeDGraph extends StatefulWidget {
     this.points = const [],
     this.shape = const [],
     this.markerColor = Colors.orange,
+    this.shapeColor = const Color(0xFF00E5FF),
     this.showGrid = false,
+    this.showRuler = false,
     this.showAxis = false,
     this.height,
     this.width,
@@ -52,7 +56,9 @@ class ThreeDGraphState extends State<ThreeDGraph> {
             points: widget.points,
             shape: widget.shape,
             markerColor: widget.markerColor,
+            shapeColor: widget.shapeColor,
             showGrid: widget.showGrid,
+            showRuler: widget.showRuler,
             showAxis: widget.showAxis,
             axsLength: widget.axisLength,
             divns: widget.divisions,
@@ -70,7 +76,9 @@ class ThreeDGraphPainter extends CustomPainter {
   final List<List<double>> points;
   final List<List<double>> shape;
   final Color markerColor;
+  final Color shapeColor;
   final bool showGrid;
+  final bool showRuler;
   final bool showAxis;
   final int divns;
   final double axsLength;
@@ -81,7 +89,9 @@ class ThreeDGraphPainter extends CustomPainter {
       required this.points,
       required this.shape,
       required this.markerColor,
+      required this.shapeColor,
       required this.showGrid,
+      required this.showRuler,
       required this.showAxis,
       required this.axsLength,
       required this.divns});
@@ -194,7 +204,6 @@ class ThreeDGraphPainter extends CustomPainter {
     drawAxisLabel(canvas, size, paint, [-(axisLength + 10), 0, 0], '-X');
 
     // Y-axis
-    if (showAxis) {}
     paint.color = Colors.green;
     drawLine3D(canvas, size, paint, [0, -axisLength, 0], [0, axisLength, 0],
         label: null);
@@ -245,8 +254,6 @@ class ThreeDGraphPainter extends CustomPainter {
     drawAxisLabel(canvas, size, paint, [0, 0, -(axisLength + 10)], '-Z');
   }
 
-//!
-
   void drawCuboid(
       Canvas canvas, Size size, Paint paint, double length, int divisions) {
     final cuboidVertices = [
@@ -272,7 +279,7 @@ class ThreeDGraphPainter extends CustomPainter {
       [0, 4], [1, 5], [2, 6], [3, 7],
     ];
 
-    paint.color = Colors.grey.withOpacity(0.5); // Light cuboid edges
+    paint.color = Colors.grey.withValues(alpha: 0.5);
 
     for (var edge in cuboidEdges) {
       drawLine3D(
@@ -291,7 +298,7 @@ class ThreeDGraphPainter extends CustomPainter {
 // Method to draw gridlines on the faces of the cuboid
   void drawCuboidGrid(
       Canvas canvas, Size size, Paint paint, double axisLength, int divisions) {
-    paint.color = Colors.grey.withOpacity(0.3); // Light gridlines
+    paint.color = Colors.grey.withValues(alpha: 0.3);
 
     double spacing = axisLength * 2 / divisions; // Grid spacing for divisions
 
@@ -347,6 +354,37 @@ class ThreeDGraphPainter extends CustomPainter {
     }
   }
 
+  void drawRulerGrid(
+      Canvas canvas, Size size, Paint paint, double axisLength, int divisions) {
+    paint.strokeWidth = 0.8;
+
+    double spacing = axisLength * 2 / divisions;
+
+    for (int i = 0; i <= divisions; i++) {
+      double offset = -axisLength + spacing * i;
+
+      bool isMajor = i == 0 || i == divisions || i == (divisions ~/ 2);
+      paint.color = isMajor
+          ? const Color(0xFFD0D0D0).withValues(alpha: 0.7)
+          : const Color(0xFFB0B0B0).withValues(alpha: 0.35);
+
+      drawLine3D(canvas, size, paint, [-axisLength, -axisLength, offset],
+          [axisLength, -axisLength, offset]);
+      drawLine3D(canvas, size, paint, [offset, -axisLength, -axisLength],
+          [offset, -axisLength, axisLength]);
+    }
+
+    paint.strokeWidth = 0.5;
+    paint.color = const Color(0xFF909090).withValues(alpha: 0.2);
+    for (int i = 0; i <= divisions * 2; i++) {
+      double offset = -axisLength + spacing * 0.5 * i;
+      drawLine3D(canvas, size, paint, [-axisLength, -axisLength, offset],
+          [axisLength, -axisLength, offset]);
+      drawLine3D(canvas, size, paint, [offset, -axisLength, -axisLength],
+          [offset, -axisLength, axisLength]);
+    }
+  }
+
 // Method to draw ticks along the axes without placing them at the ends
   void drawTicksWithoutEnds(Canvas canvas, Size size, Paint paint,
       double axisLength, int divisions, double tickSize) {
@@ -363,7 +401,6 @@ class ThreeDGraphPainter extends CustomPainter {
     }
   }
 
-  //!
   void drawAxisLabel(Canvas canvas, Size size, Paint paint,
       List<double> position, String label) {
     final rotated = rotatePoint(
@@ -439,11 +476,13 @@ class ThreeDGraphPainter extends CustomPainter {
   }
 
   // Draw a polygon (closed shape) in 3D
-  void drawPolygon3D(
-      Canvas canvas, Size size, Paint paint, List<List<double>> vertices) {
+  void drawPolygon3D(Canvas canvas, Size size, Paint paint,
+      List<List<double>> vertices,
+      [double axisLength = 150, int divisions = 10]) {
     for (int i = 0; i < vertices.length; i++) {
-      final start = vertices[i];
-      final end = vertices[(i + 1) % vertices.length];
+      final start = normalizeToGrid(vertices[i], axisLength, divisions);
+      final end = normalizeToGrid(
+          vertices[(i + 1) % vertices.length], axisLength, divisions);
       drawLine3D(canvas, size, paint, start, end);
     }
   }
@@ -467,35 +506,56 @@ class ThreeDGraphPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
+    double axisLength = axsLength;
+    int divisions = divns;
+
+    final strokePaint = Paint()
       ..strokeWidth = 2
       ..style = PaintingStyle.stroke;
 
-    double axisLength = axsLength; // New adjustable axis length
-    int divisions = divns; // Number of divisions on each axis
-    // Draw the 3D axes
-    if (showAxis) drawAxis(canvas, size, paint, axisLength);
+    if (showRuler) {
+      drawRulerGrid(canvas, size, strokePaint, axisLength, divisions);
+    }
 
-    // Draw the cuboid with gridlines
-    if (showGrid) drawCuboid(canvas, size, paint, axisLength, divisions);
+    if (showGrid) {
+      drawCuboid(canvas, size, strokePaint, axisLength, divisions);
+    }
 
-    // Draw ticks on the axes, avoid ends where the cones are placed
-    double tickSize = 5.0; // Adjust size as needed
+    if (showAxis) {
+      drawAxis(canvas, size, strokePaint, axisLength);
+    }
+
+    double tickSize = 5.0;
     if (showAxis) {
       drawTicksWithoutEnds(
-          canvas, size, paint, axisLength, divisions, tickSize);
+          canvas, size, strokePaint, axisLength, divisions, tickSize);
     }
 
-    // Plot points
-    paint.color = markerColor;
+    strokePaint.color = markerColor;
     for (var point in points) {
-      // drawPoint3D(canvas, size, paint, point);
-      drawPoint3D(canvas, size, paint, point, axisLength, divisions);
+      drawPoint3D(canvas, size, strokePaint, point, axisLength, divisions);
     }
 
-    // Draw shapes
-    paint.color = Colors.purple;
-    drawPolygon3D(canvas, size, paint, shape);
+    if (shape.isNotEmpty) {
+      final glowPaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 6
+        ..color = shapeColor.withValues(alpha: 0.25)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5);
+      drawPolygon3D(canvas, size, glowPaint, shape, axisLength, divisions);
+
+      final midPaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3
+        ..color = shapeColor.withValues(alpha: 0.5);
+      drawPolygon3D(canvas, size, midPaint, shape, axisLength, divisions);
+
+      strokePaint
+        ..color = shapeColor
+        ..strokeWidth = 1.5;
+      drawPolygon3D(canvas, size, strokePaint, shape, axisLength, divisions);
+      strokePaint.strokeWidth = 2;
+    }
   }
 
   @override
